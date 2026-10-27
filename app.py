@@ -37,7 +37,7 @@ except ImportError:
 
 
 # ============================================================
-# 0. CẤU HÌNH Đường DẪN FILE HỆ THỐNG
+# 0. CẤU HÌNH ĐƯỜNG DẪN FILE HỆ THỐNG
 # ============================================================
 
 def app_data_path(filename):
@@ -58,7 +58,7 @@ ENDPOINT_SEARCH_ASN = "/api/apps/process/returninbound/riasn/search_asn"
 ENDPOINT_SEARCH_ASN_SKU = "/api/apps/process/returninbound/riasn/search_asn_sku"
 ENDPOINT_SEARCH_ASN_DETAIL = "/api/apps/process/returninbound/riasn/search_asn_detail"
 
-DEFAULT_USER = "797060"
+DEFAULT_USER = "498848"
 DEFAULT_PASS = "Saigon@123"
 DEFAULT_STATION = "1"
 
@@ -384,11 +384,10 @@ class ScanReturnTNApp:
 
         self.root.title("WMS SSC - System Check & Auto Print")
         
-        # MỞ RỘNG GIAO DIỆN KHỞI TẠO MẶC ĐỊNH & PHÓNG TO TOÀN MÀN HÌNH
         self.root.geometry("1680x950")
         self.root.minsize(1280, 750)
         try:
-            self.root.state("zoomed")  # Phóng to toàn màn hình trên Windows
+            self.root.state("zoomed")
         except Exception:
             pass
             
@@ -399,6 +398,9 @@ class ScanReturnTNApp:
         self.csrf_token = ""
         self.all_records = []
         self.photo_cache = []
+
+        # BỘ NHỚ TẠM (CACHE) DÀNH CHO DỮ LIỆU ĐÃ TRA CỨU
+        self.data_cache = {}
 
         self.setup_theme_styles()
         self.create_layout()
@@ -569,7 +571,7 @@ class ScanReturnTNApp:
         self.status_label = tk.Label(status_card, text="Vui lòng bấm 'KẾT NỐI ĐĂNG NHẬP WMS' để bắt đầu...", bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 9, "bold"), anchor="w")
         self.status_label.pack(side="left", fill="x", expand=True)
 
-        # 5. TABLE HISTORY (TỐI ƯU CỘT VỚI KÍCH THƯỚC SIÊU RỘNG)
+        # 5. TABLE HISTORY
         table_card = tk.Frame(self.root, bg=self.colors["card_bg"], highlightbackground=self.colors["card_border"], highlightthickness=1)
         table_card.pack(fill="both", expand=True, padx=24, pady=(0, 10))
 
@@ -788,13 +790,48 @@ class ScanReturnTNApp:
                     pass
 
     # ============================================================
-    # TRA CỨU API & XỬ LÝ DỮ LIỆU
+    # TRA CỨU API & XỬ LÝ DỮ LIỆU (TÍCH HỢP DATA CACHE)
     # ============================================================
 
     def start_search(self, event=None):
         input_code = self.entry_input_code.get().strip().upper()
         if not input_code:
             self.set_status("Vui lòng quét hoặc nhập mã!", self.colors["danger"])
+            return
+
+        # 🚀 KIỂM TRA BỘ NHỚ TẠM (DATA CACHE)
+        if input_code in self.data_cache:
+            cached_res = self.data_cache[input_code]
+            
+            # Trả về kết quả trực tiếp từ Cache không cần qua API
+            self.update_result(
+                input_code, 
+                cached_res["found_data"], 
+                cached_res["total_price_str"], 
+                cached_res["sku_id_str"], 
+                cached_res["follow_up_str"], 
+                cached_res["inbound_type_str"], 
+                cached_res["cb_option_str"], 
+                cached_res["sku_name_str"], 
+                cached_res["all_sku_images"], 
+                cached_res["all_qc_images"], 
+                cached_res["status"], 
+                cached_res["color"]
+            )
+            self.set_status(f"⚡ [CACHE] Mã: {input_code} | Trạng thái: {cached_res['status']}", self.colors["success"])
+
+            # Tự động in tem nếu bật tùy chọn auto_print
+            if self.auto_print_var.get() and cached_res["status"] == "Thành công":
+                sub_info = f"Return TN: {input_code}" if cached_res.get("detected_mode") == "RETURN_TN" else f"Order: {input_code}"
+                label_img = generate_label_image(
+                    print_value=cached_res["found_data"],
+                    sub_info=sub_info,
+                    followup_info=cached_res["follow_up_str"],
+                    inbound_type=cached_res["inbound_type_str"],
+                    cb_option=cached_res["cb_option_str"],
+                    total_price=cached_res["total_price_str"]
+                )
+                print_label_direct(label_img)
             return
 
         if not self.cookie_val:
@@ -963,6 +1000,22 @@ class ScanReturnTNApp:
                     found_data = ", ".join(list(dict.fromkeys(all_rtn))) if all_rtn else input_code
                     sub_info = f"Order: {input_code}"
 
+                # 💾 LƯU KẾT QUẢ VÀO BỘ NHỚ TẠM (CACHE)
+                self.data_cache[input_code] = {
+                    "found_data": found_data,
+                    "total_price_str": total_price_str,
+                    "sku_id_str": sku_id_str,
+                    "follow_up_str": follow_up_str,
+                    "inbound_type_str": inbound_type_str,
+                    "cb_option_str": cb_option_str,
+                    "sku_name_str": sku_name_str,
+                    "all_sku_images": all_sku_images,
+                    "all_qc_images": all_qc_images,
+                    "status": status,
+                    "color": color,
+                    "detected_mode": detected_mode
+                }
+
                 if self.auto_print_var.get():
                     label_img = generate_label_image(
                         print_value=found_data,
@@ -1033,8 +1086,9 @@ class ScanReturnTNApp:
             self.tree.delete(item)
         self.all_records.clear()
         self.photo_cache.clear()
+        self.data_cache.clear()  # XÓA CẢ BỘ NHỚ TẠM
         self._update_stats()
-        self.set_status("Đã xóa sạch dữ liệu lịch sử hiển thị.", self.colors["primary"])
+        self.set_status("Đã xóa sạch dữ liệu lịch sử hiển thị và bộ nhớ tạm.", self.colors["primary"])
 
     # ============================================================
     # POPUP CỬA SỔ HIỂN THỊ CHI TIẾT ẢNH SP & ẢNH QC
