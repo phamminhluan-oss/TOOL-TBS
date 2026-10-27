@@ -259,12 +259,13 @@ def print_label_direct(image_path):
 
 
 # ============================================================
-# 3. TRÍCH XUẤT NÂNG CAO (SKU NAME, IMAGE, QC IMAGES, TOT. PRICE)
+# 3. TRÍCH XUẤT NÂNG CAO (SKU, QC, REMARK, JUDGE DETAILS)
 # ============================================================
 
 def extract_wms_details_deep(data_obj):
     skus, follow_ups, cb_options, inbound_types = set(), set(), set(), set()
     sku_names, sku_images, qc_images = set(), set(), set()
+    judge_results, judge_remarks, qc_remarks, remarks = set(), set(), set(), set()
     total_price_sum = 0.0
 
     sku_keys = {"sku_id", "item_sku_id", "sku", "seller_sku", "sku_code", "msku_id", "product_sku_id"}
@@ -320,6 +321,22 @@ def extract_wms_details_deep(data_obj):
                     val_str = str(v).strip()
                     inbound_types.add(INBOUND_TYPE_MAP.get(v) or INBOUND_TYPE_MAP.get(val_str) or val_str)
 
+                if k_lower == "judge_result" and v:
+                    val_s = str(v).strip()
+                    if val_s: judge_results.add(val_s)
+
+                if k_lower == "judge_remark" and v:
+                    val_s = str(v).strip()
+                    if val_s: judge_remarks.add(val_s)
+
+                if k_lower == "qc_remark" and v:
+                    val_s = str(v).strip()
+                    if val_s: qc_remarks.add(val_s)
+
+                if k_lower == "remark" and v:
+                    val_s = str(v).strip()
+                    if val_s: remarks.add(val_s)
+
                 if k_lower in price_keys and v is not None:
                     p = parse_number(v)
                     if p > dict_price: dict_price = p
@@ -353,6 +370,10 @@ def extract_wms_details_deep(data_obj):
         " | ".join(sku_names) if sku_names else "-",
         list(sku_images),
         list(qc_images),
+        " | ".join(judge_results) if judge_results else "-",
+        " | ".join(judge_remarks) if judge_remarks else "-",
+        " | ".join(qc_remarks) if qc_remarks else "-",
+        " | ".join(remarks) if remarks else "-",
     )
 
 
@@ -571,7 +592,7 @@ class ScanReturnTNApp:
         self.status_label = tk.Label(status_card, text="Vui lòng bấm 'KẾT NỐI ĐĂNG NHẬP WMS' để bắt đầu...", bg=self.colors["bg"], fg=self.colors["muted"], font=("Segoe UI", 9, "bold"), anchor="w")
         self.status_label.pack(side="left", fill="x", expand=True)
 
-        # 5. TABLE HISTORY
+        # 5. TABLE HISTORY (TỐI ƯU BỔ SUNG THÊM CỘT JUDGE, QC REMARK, REMARK)
         table_card = tk.Frame(self.root, bg=self.colors["card_bg"], highlightbackground=self.colors["card_border"], highlightthickness=1)
         table_card.pack(fill="both", expand=True, padx=24, pady=(0, 10))
 
@@ -583,7 +604,7 @@ class ScanReturnTNApp:
         table_frame = tk.Frame(table_card, bg=self.colors["card_bg"])
         table_frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
-        columns = ("time", "input_code", "found_data", "sku_name", "total_price", "sku_id", "follow_up", "inbound_type", "cb_option", "has_image", "has_qc_image", "status")
+        columns = ("time", "input_code", "found_data", "sku_name", "total_price", "sku_id", "follow_up", "inbound_type", "cb_option", "judge_result", "remark", "qc_remark", "judge_remark", "has_image", "has_qc_image", "status")
         self.tree = ttk.Treeview(table_frame, columns=columns, show="headings", style="Treeview")
 
         headings = {
@@ -596,6 +617,10 @@ class ScanReturnTNApp:
             "follow_up": "FOLLOW UP",
             "inbound_type": "INBOUND TYPE",
             "cb_option": "CB OPTION",
+            "judge_result": "JUDGE RESULT",
+            "remark": "REMARK",
+            "qc_remark": "QC REMARK",
+            "judge_remark": "JUDGE REMARK",
             "has_image": "ẢNH SP",
             "has_qc_image": "ẢNH QC",
             "status": "TRẠNG THÁI"
@@ -603,14 +628,18 @@ class ScanReturnTNApp:
 
         col_widths = {
             "time": 110,
-            "input_code": 170,
-            "found_data": 170,
-            "sku_name": 380,
-            "total_price": 120,
-            "sku_id": 200,
-            "follow_up": 160,
-            "inbound_type": 130,
+            "input_code": 160,
+            "found_data": 160,
+            "sku_name": 350,
+            "total_price": 110,
+            "sku_id": 180,
+            "follow_up": 140,
+            "inbound_type": 120,
             "cb_option": 90,
+            "judge_result": 130,
+            "remark": 180,
+            "qc_remark": 180,
+            "judge_remark": 250,
             "has_image": 85,
             "has_qc_image": 85,
             "status": 110
@@ -815,6 +844,10 @@ class ScanReturnTNApp:
                 cached_res["sku_name_str"], 
                 cached_res["all_sku_images"], 
                 cached_res["all_qc_images"], 
+                cached_res["judge_result_str"],
+                cached_res["judge_remark_str"],
+                cached_res["qc_remark_str"],
+                cached_res["remark_str"],
                 cached_res["status"], 
                 cached_res["color"]
             )
@@ -900,6 +933,7 @@ class ScanReturnTNApp:
     def process_search_and_print(self, input_code):
         sku_id_str, follow_up_str, inbound_type_str, cb_option_str, total_price_str = "-", "-", "-", "-", "-"
         sku_name_str = "-"
+        judge_result_str, judge_remark_str, qc_remark_str, remark_str = "-", "-", "-", "-"
         all_sku_images, all_qc_images = [], []
 
         try:
@@ -924,11 +958,16 @@ class ScanReturnTNApp:
                 status = "Thành công"
                 color = self.colors["success"]
 
-                _, fu_1, in_1, cb_1, pr_1, name_1, img_1, qc_1 = extract_wms_details_deep(api_result)
+                _, fu_1, in_1, cb_1, pr_1, name_1, img_1, qc_1, jr_1, jrm_1, qrm_1, rm_1 = extract_wms_details_deep(api_result)
 
                 inbound_ids = set()
                 all_cb_list = [cb_1] if cb_1 != "-" else []
                 all_sku_name_list = [name_1] if name_1 != "-" else []
+                all_jr_list = [jr_1] if jr_1 != "-" else []
+                all_jrm_list = [jrm_1] if jrm_1 != "-" else []
+                all_qrm_list = [qrm_1] if qrm_1 != "-" else []
+                all_rm_list = [rm_1] if rm_1 != "-" else []
+
                 all_sku_images.extend(img_1)
                 all_qc_images.extend(qc_1)
 
@@ -952,11 +991,16 @@ class ScanReturnTNApp:
                 for ib_id in inbound_ids:
                     try:
                         asn_detail_res = self.fetch_wms_asn_detail_api(ib_id)
-                        _, f_dt, i_dt, cb_dt, pr_dt, n_dt, img_dt, qc_dt = extract_wms_details_deep(asn_detail_res)
+                        _, f_dt, i_dt, cb_dt, pr_dt, n_dt, img_dt, qc_dt, jr_dt, jrm_dt, qrm_dt, rm_dt = extract_wms_details_deep(asn_detail_res)
                         if f_dt != "-": all_follow_list.append(f_dt)
                         if i_dt != "-": all_inbound_list.append(i_dt)
                         if cb_dt != "-": all_cb_list.append(cb_dt)
                         if n_dt != "-": all_sku_name_list.append(n_dt)
+                        if jr_dt != "-": all_jr_list.append(jr_dt)
+                        if jrm_dt != "-": all_jrm_list.append(jrm_dt)
+                        if qrm_dt != "-": all_qrm_list.append(qrm_dt)
+                        if rm_dt != "-": all_rm_list.append(rm_dt)
+
                         all_sku_images.extend(img_dt)
                         all_qc_images.extend(qc_dt)
                         if isinstance(pr_dt, (int, float)): grand_total_price += pr_dt
@@ -965,13 +1009,18 @@ class ScanReturnTNApp:
 
                     try:
                         sku_api_res = self.fetch_wms_sku_api(ib_id)
-                        s_res, f_res, i_res, cb_res, pr_res, n_res, img_res, qc_res = extract_wms_details_deep(sku_api_res)
+                        s_res, f_res, i_res, cb_res, pr_res, n_res, img_res, qc_res, jr_res, jrm_res, qrm_res, rm_res = extract_wms_details_deep(sku_api_res)
 
                         if s_res != "-": all_sku_list.append(s_res)
                         if f_res != "-": all_follow_list.append(f_res)
                         if i_res != "-": all_inbound_list.append(i_res)
                         if cb_res != "-": all_cb_list.append(cb_res)
                         if n_res != "-": all_sku_name_list.append(n_res)
+                        if jr_res != "-": all_jr_list.append(jr_res)
+                        if jrm_res != "-": all_jrm_list.append(jrm_res)
+                        if qrm_res != "-": all_qrm_list.append(qrm_res)
+                        if rm_res != "-": all_rm_list.append(rm_res)
+
                         all_sku_images.extend(img_res)
                         all_qc_images.extend(qc_res)
                         if isinstance(pr_res, (int, float)): grand_total_price += pr_res
@@ -982,6 +1031,11 @@ class ScanReturnTNApp:
                 follow_up_str = ", ".join(list(dict.fromkeys(all_follow_list))) if all_follow_list else "-"
                 inbound_type_str = ", ".join(list(dict.fromkeys(all_inbound_list))) if all_inbound_list else "-"
                 sku_name_str = " | ".join(list(dict.fromkeys(all_sku_name_list))) if all_sku_name_list else "-"
+                
+                judge_result_str = " | ".join(list(dict.fromkeys(all_jr_list))) if all_jr_list else "-"
+                judge_remark_str = " | ".join(list(dict.fromkeys(all_jrm_list))) if all_jrm_list else "-"
+                qc_remark_str = " | ".join(list(dict.fromkeys(all_qrm_list))) if all_qrm_list else "-"
+                remark_str = " | ".join(list(dict.fromkeys(all_rm_list))) if all_rm_list else "-"
 
                 all_sku_images = list(dict.fromkeys(all_sku_images))
                 all_qc_images = list(dict.fromkeys(all_qc_images))
@@ -1011,6 +1065,10 @@ class ScanReturnTNApp:
                     "sku_name_str": sku_name_str,
                     "all_sku_images": all_sku_images,
                     "all_qc_images": all_qc_images,
+                    "judge_result_str": judge_result_str,
+                    "judge_remark_str": judge_remark_str,
+                    "qc_remark_str": qc_remark_str,
+                    "remark_str": remark_str,
                     "status": status,
                     "color": color,
                     "detected_mode": detected_mode
@@ -1039,10 +1097,11 @@ class ScanReturnTNApp:
 
         self.root.after(
             0, self.update_result, input_code, found_data, total_price_str, sku_id_str, 
-            follow_up_str, inbound_type_str, cb_option_str, sku_name_str, all_sku_images, all_qc_images, status, color
+            follow_up_str, inbound_type_str, cb_option_str, sku_name_str, all_sku_images, all_qc_images,
+            judge_result_str, judge_remark_str, qc_remark_str, remark_str, status, color
         )
 
-    def update_result(self, input_code, found_data, total_price, sku_id, follow_up, inbound_type, cb_option, sku_name, sku_images, qc_images, status, color):
+    def update_result(self, input_code, found_data, total_price, sku_id, follow_up, inbound_type, cb_option, sku_name, sku_images, qc_images, judge_result, judge_remark, qc_remark, remark, status, color):
         current_time = datetime.now().strftime("%H:%M:%S %d-%m")
         has_image_str = f"🖼️ ({len(sku_images)})" if sku_images else "-"
         has_qc_str = f"📸 ({len(qc_images)})" if qc_images else "-"
@@ -1057,6 +1116,10 @@ class ScanReturnTNApp:
             "follow_up": follow_up,
             "inbound_type": inbound_type,
             "cb_option": cb_option,
+            "judge_result": judge_result,
+            "judge_remark": judge_remark,
+            "qc_remark": qc_remark,
+            "remark": remark,
             "has_image": has_image_str,
             "has_qc_image": has_qc_str,
             "status": status,
@@ -1069,7 +1132,7 @@ class ScanReturnTNApp:
         tag = "success" if status == "Thành công" else ("notfound" if status == "Không tìm thấy" else "error")
         tree_values = (
             current_time, input_code, found_data, sku_name, total_price, 
-            sku_id, follow_up, inbound_type, cb_option, has_image_str, has_qc_str, status
+            sku_id, follow_up, inbound_type, cb_option, judge_result, remark, qc_remark, judge_remark, has_image_str, has_qc_str, status
         )
         item_id = self.tree.insert("", 0, values=tree_values, tags=(tag,))
         
@@ -1086,7 +1149,7 @@ class ScanReturnTNApp:
             self.tree.delete(item)
         self.all_records.clear()
         self.photo_cache.clear()
-        self.data_cache.clear()  # XÓA CẢ BỘ NHỚ TẠM
+        self.data_cache.clear()
         self._update_stats()
         self.set_status("Đã xóa sạch dữ liệu lịch sử hiển thị và bộ nhớ tạm.", self.colors["primary"])
 
@@ -1119,7 +1182,19 @@ class ScanReturnTNApp:
         top_info.pack(fill="x")
 
         tk.Label(top_info, text=f"📦 Mã Quét: {record['input_code']}", font=("Segoe UI", 13, "bold"), fg="#38BDF8", bg="#1E293B").pack(anchor="w")
-        tk.Label(top_info, text=f"🏷️ Tên SKU: {record['sku_name']}", font=("Segoe UI", 11), fg="#F8FAFC", bg="#1E293B", wraplength=1150, justify="left").pack(anchor="w", pady=(3, 0))
+        tk.Label(top_info, text=f"🏷️ Tên SKU: {record['sku_name']}", font=("Segoe UI", 11), fg="#F8FAFC", bg="#1E293B", wraplength=1150, justify="left").pack(anchor="w", pady=(2, 0))
+
+        if record.get('remark') and record.get('remark') != "-":
+            tk.Label(top_info, text=f"💬 Remark: {record['remark']}", font=("Segoe UI", 10, "bold"), fg="#F59E0B", bg="#1E293B", wraplength=1150, justify="left").pack(anchor="w", pady=(2, 0))
+
+        if record.get('judge_result') and record.get('judge_result') != "-":
+            tk.Label(top_info, text=f"⚖️ Judge Result: {record['judge_result']}", font=("Segoe UI", 10, "bold"), fg="#22C55E", bg="#1E293B", wraplength=1150, justify="left").pack(anchor="w", pady=(2, 0))
+
+        if record.get('qc_remark') and record.get('qc_remark') != "-":
+            tk.Label(top_info, text=f"📝 QC Remark: {record['qc_remark']}", font=("Segoe UI", 10), fg="#E2E8F0", bg="#1E293B", wraplength=1150, justify="left").pack(anchor="w", pady=(2, 0))
+
+        if record.get('judge_remark') and record.get('judge_remark') != "-":
+            tk.Label(top_info, text=f"📌 Judge Remark: {record['judge_remark']}", font=("Segoe UI", 10), fg="#CBD5E1", bg="#1E293B", wraplength=1150, justify="left").pack(anchor="w", pady=(2, 0))
 
         canvas_frame = tk.Frame(popup, bg="#0F172A")
         canvas_frame.pack(fill="both", expand=True, padx=15, pady=15)
