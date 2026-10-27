@@ -58,7 +58,7 @@ ENDPOINT_SEARCH_ASN = "/api/apps/process/returninbound/riasn/search_asn"
 ENDPOINT_SEARCH_ASN_SKU = "/api/apps/process/returninbound/riasn/search_asn_sku"
 ENDPOINT_SEARCH_ASN_DETAIL = "/api/apps/process/returninbound/riasn/search_asn_detail"
 
-DEFAULT_USER = "498848"
+DEFAULT_USER = "797060"
 DEFAULT_PASS = "Saigon@123"
 DEFAULT_STATION = "1"
 
